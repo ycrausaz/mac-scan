@@ -1,5 +1,6 @@
 scanner:
   host: "http://192.168.1.6"
+  mac:  "84:2A:FD:A6:F2:B0"
   dpi: 300
   color_mode: "Color"      # Color | Grayscale
   duplex: false            # true -> double-sided via ADF
