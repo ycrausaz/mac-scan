@@ -7,7 +7,7 @@ from PyQt6.QtWidgets import (
     QDialogButtonBox, QSpinBox, QCheckBox, QMenu, QSystemTrayIcon, QStyle
 )
 from PyQt6.QtGui import QIcon, QAction
-from PyQt6.QtCore import Qt, QTimer
+from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 
 import requests  # for HTTP reachability probe
 
@@ -171,6 +171,25 @@ class PreferencesDialog(QDialog):
         self.cfg["ui"]["filename_pattern"] = self.ed_pattern.text().strip() or "{class}_{date}_{time}.pdf"
         self.cfg["ui"]["remember_last_class"] = bool(self.chk_remember.isChecked())
 
+class _NetProbe(QObject):
+    done = pyqtSignal(bool, bool, object)  # reachable, mac_matches, seen_mac
+
+    def __init__(self, owner: "ScanApp"):
+        super().__init__()
+        self._owner = owner
+
+    def run_once(self):
+        """
+        Run the owner's check and emit a Qt signal with the result.
+        This function is safe to call from any thread.
+        """
+        try:
+            reachable, mac_matches, seen_mac = self._owner._check_printer_once()
+        except Exception:
+            reachable, mac_matches, seen_mac = (False, False, None)
+        # Emit the result; Qt will deliver to slots on the main thread
+        self.done.emit(reachable, mac_matches, seen_mac)
+
 
 # ---------- Main app ----------
 
@@ -308,16 +327,13 @@ class ScanApp(QWidget):
     def _check_printer_once(self) -> tuple[bool, bool, Optional[str]]:
         """
         Returns (reachable, mac_matches, seen_mac).
-    
-        Strategy:
-          1) HTTP GET to /eSCL/ScannerStatus with a hard 2s deadline and NO proxies.
-          2) Best-effort ARP MAC lookup (also hard timeout).
-          3) Never throws; always returns quickly.
+        1) GET http://<ip>/eSCL/ScannerStatus with timeout, no proxies
+        2) best-effort ARP for MAC
         """
         ip = self._extract_ip()
         seen_mac: Optional[str] = None
     
-        # 1) HTTP probe (proxy-free)
+        # HTTP probe (proxy-free)
         reachable = False
         try:
             url = f"http://{ip}/eSCL/ScannerStatus"
@@ -326,23 +342,16 @@ class ScanApp(QWidget):
                 timeout=2.0,
                 headers={"Connection": "close"},
                 allow_redirects=False,
-                proxies={"http": None, "https": None},  # <- ignore system/corp proxies
+                proxies={"http": None, "https": None},
             )
-            # Any 2xx/3xx/4xx means *something* responded at that IP
             reachable = (200 <= r.status_code < 500)
         except Exception:
             reachable = False
     
-        # 2) ARP lookup (best-effort)
+        # ARP (best-effort)
         try:
             arp_bin = "/usr/sbin/arp" if os.path.exists("/usr/sbin/arp") else "arp"
-            out = subprocess.run(
-                [arp_bin, "-n", ip],
-                capture_output=True,
-                text=True,
-                check=False,
-                timeout=2.0
-            )
+            out = subprocess.run([arp_bin, "-n", ip], capture_output=True, text=True, check=False, timeout=2.0)
             seen_mac = self._parse_arp_mac((out.stdout or "") + (out.stderr or ""))
         except Exception:
             seen_mac = None
@@ -375,21 +384,17 @@ class ScanApp(QWidget):
             except Exception:
                 pass
     
-        def worker():
-            try:
-                reachable, mac_matches, seen_mac = self._check_printer_once()
-            except Exception:
-                reachable, mac_matches, seen_mac = (False, False, None)
-            # Always post a UI update back to the main thread
-            QTimer.singleShot(0, lambda: self._update_net_ui(reachable, mac_matches, seen_mac))
+        # Create (or recreate) the probe and connect its signal to our UI updater
+        self._net_probe = _NetProbe(self)
+        self._net_probe.done.connect(self._update_net_ui)
     
-        # Run once immediately so it doesn't linger on "Checking…"
-        threading.Thread(target=worker, daemon=True).start()
+        # Kick off the first check immediately, in a background thread
+        threading.Thread(target=self._net_probe.run_once, daemon=True).start()
     
         # Periodic checks every 10s
         self._net_timer = QTimer(self)
         self._net_timer.setInterval(10_000)
-        self._net_timer.timeout.connect(lambda: threading.Thread(target=worker, daemon=True).start())
+        self._net_timer.timeout.connect(lambda: threading.Thread(target=self._net_probe.run_once, daemon=True).start())
         self._net_timer.start()
 
     # ---- Actions ----
