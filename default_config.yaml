@@ -1,0 +1,16 @@
+scanner:
+  host: "http://192.168.1.6"
+  dpi: 300
+  color_mode: "Color"      # Color | Grayscale
+  duplex: false            # true -> double-sided via ADF
+  page_size: "A4"          # A4 | Letter | Legal | ...
+
+ui:
+  filename_pattern: "{class}_{date}_{time}_{topic}.pdf"
+  last_class: ""                                  # auto-updated
+  remember_last_class: true
+
+classes:
+  "Algebra": "/Users/yann/Documents/Classes/Algebra"
+  "Physics": "/Users/yann/Documents/Classes/Physics"
+  "CS": "/Users/yann/Documents/Classes/CS"
