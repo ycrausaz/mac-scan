@@ -3,7 +3,7 @@ scanner:
   mac:  "84:2A:FD:A6:F2:B0"
   dpi: 300
   color_mode: "Color"      # Color | Grayscale
-  duplex: false            # true -> double-sided via ADF
+  duplex: true            # true -> double-sided via ADF
   page_size: "A4"          # A4 | Letter | Legal | ...
 
 ui:
