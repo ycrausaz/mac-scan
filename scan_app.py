@@ -11,6 +11,9 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal, QObject
 
 import requests  # for HTTP reachability probe
 
+import PyPDF2
+from PyQt6.QtWidgets import QProgressDialog
+
 from escl_client import ESCLScanner
 
 
@@ -78,7 +81,7 @@ class AboutDialog(QDialog):
 
         body = QLabel(
             "Scan class documents directly to per-class folders using your network scanner (AirScan/eSCL).<br>"
-            "Version 1.2 • © 2025 You", self
+            "Version 1.4 • © 2025 You", self
         )
         body.setTextFormat(Qt.TextFormat.RichText)
         body.setWordWrap(True)
@@ -89,8 +92,10 @@ class AboutDialog(QDialog):
             "<li>Class picker & custom filename patterns</li>"
             "<li>Menu bar quick actions</li>"
             "<li>Open file & open location</li>"
-            "<li>Preferences: IP/MAC, DPI, color, duplex, page size</li>"
+            "<li>Preferences: IP/MAC, DPI, color, page size</li>"
+            "<li>Manual input source selection (ADF/Flatbed)</li>"
             "<li>Network status (green/amber/red with MAC verify)</li>"
+            "<li>Manual duplex scanning support</li>"
             "</ul>", self
         )
         features.setTextFormat(Qt.TextFormat.RichText)
@@ -132,15 +137,24 @@ class PreferencesDialog(QDialog):
         self.ed_color.setCurrentText(cfg.get("scanner", {}).get("color_mode", "Color"))
         frm.addRow("Color mode:", self.ed_color)
 
-        self.chk_duplex = QCheckBox("Use duplex (ADF double-sided)")
-        self.chk_duplex.setChecked(bool(cfg.get("scanner", {}).get("duplex", False)))
-        frm.addRow(self.chk_duplex)
-
         self.ed_page = QComboBox(self)
         self.ed_page.addItems(["A4", "Letter", "Legal", "A5", "A3"])
         self.ed_page.setEditable(True)
         self.ed_page.setCurrentText(cfg.get("scanner", {}).get("page_size", "A4"))
         frm.addRow("Page size:", self.ed_page)
+
+        # Input source selection
+        self.ed_source = QComboBox(self)
+        self.ed_source.addItems(["Auto", "Feeder (ADF)", "Platen (Flatbed)"])
+        current_source = cfg.get("scanner", {}).get("input_source", "Auto")
+        self.ed_source.setCurrentText(current_source)
+        frm.addRow("Input source:", self.ed_source)
+
+        # Add help text for input source
+        source_hint = QLabel("Auto: detect based on document presence. Feeder: force ADF use. Platen: force flatbed use.", self)
+        source_hint.setStyleSheet("color: #666; font-size: 11px;")
+        source_hint.setWordWrap(True)
+        frm.addRow("", source_hint)
 
         self.ed_pattern = QLineEdit(self)
         self.ed_pattern.setText(cfg.get("ui", {}).get("filename_pattern", "{class}_{date}_{time}.pdf"))
@@ -149,6 +163,11 @@ class PreferencesDialog(QDialog):
         self.chk_remember = QCheckBox("Remember last class for one-click scanning")
         self.chk_remember.setChecked(bool(cfg.get("ui", {}).get("remember_last_class", True)))
         frm.addRow(self.chk_remember)
+
+        # Debug mode checkbox
+        self.chk_debug = QCheckBox("Enable debug output (check console for scanner status)")
+        self.chk_debug.setChecked(bool(cfg.get("ui", {}).get("debug_mode", False)))
+        frm.addRow(self.chk_debug)
 
         hint = QLabel("Tokens: {class} {date} {time} {topic} (and {ext})", self)
         hint.setStyleSheet("color: #666;")
@@ -166,10 +185,11 @@ class PreferencesDialog(QDialog):
         self.cfg["scanner"]["mac"] = self.ed_mac.text().strip()
         self.cfg["scanner"]["dpi"] = int(self.spin_dpi.value())
         self.cfg["scanner"]["color_mode"] = self.ed_color.currentText()
-        self.cfg["scanner"]["duplex"] = bool(self.chk_duplex.isChecked())
         self.cfg["scanner"]["page_size"] = self.ed_page.currentText().strip()
+        self.cfg["scanner"]["input_source"] = self.ed_source.currentText()
         self.cfg["ui"]["filename_pattern"] = self.ed_pattern.text().strip() or "{class}_{date}_{time}.pdf"
         self.cfg["ui"]["remember_last_class"] = bool(self.chk_remember.isChecked())
+        self.cfg["ui"]["debug_mode"] = bool(self.chk_debug.isChecked())
 
 class _NetProbe(QObject):
     done = pyqtSignal(bool, bool, object)  # reachable, mac_matches, seen_mac
@@ -222,21 +242,27 @@ class ScanApp(QWidget):
         row1.addWidget(self.ed_topic, 3)
         layout.addLayout(row1)
 
-        # Row 2: buttons (Scan / Open folder / Prefs / About)
+        # Row 2: buttons
         row2 = QHBoxLayout()
-        self.btn_scan = QPushButton("Scan")
-        self.btn_scan.clicked.connect(lambda: self.on_scan())  # lambda avoids stray 'checked' bool
+        self.btn_scan = QPushButton("Scan (Single-sided)")
+        self.btn_scan.clicked.connect(lambda: self.on_scan())
         self.btn_scan.setShortcut("Return")
+        self.btn_scan.setToolTip("Scan single-sided documents")
         row2.addWidget(self.btn_scan)
-
+        
+        self.btn_manual_duplex = QPushButton("Manual Duplex")
+        self.btn_manual_duplex.clicked.connect(lambda: self.on_scan_manual_duplex())
+        self.btn_manual_duplex.setToolTip("Scan front sides, then back sides, then combine")
+        row2.addWidget(self.btn_manual_duplex)
+        
         self.btn_open = QPushButton("Open folder…")
         self.btn_open.clicked.connect(self.on_open_folder)
         row2.addWidget(self.btn_open)
-
+        
         self.btn_prefs = QPushButton("Preferences…")
         self.btn_prefs.clicked.connect(self.on_prefs)
         row2.addWidget(self.btn_prefs)
-
+        
         self.btn_about = QPushButton("About…")
         self.btn_about.clicked.connect(self.on_about)
         row2.addWidget(self.btn_about)
@@ -303,6 +329,11 @@ class ScanApp(QWidget):
             save_config(self.config)
             self.rebuild_tray_menu()
 
+    def debug_print(self, msg: str):
+        """Print debug message if debug mode is enabled"""
+        if self.config.get("ui", {}).get("debug_mode", False):
+            print(f"[DEBUG] {msg}")
+
     # ---- Network reachability ----
 
     @staticmethod
@@ -345,19 +376,24 @@ class ScanApp(QWidget):
                 proxies={"http": None, "https": None},
             )
             reachable = (200 <= r.status_code < 500)
-        except Exception:
+            self.debug_print(f"HTTP probe to {url}: status={r.status_code}, reachable={reachable}")
+        except Exception as e:
             reachable = False
+            self.debug_print(f"HTTP probe failed: {e}")
     
         # ARP (best-effort)
         try:
             arp_bin = "/usr/sbin/arp" if os.path.exists("/usr/sbin/arp") else "arp"
             out = subprocess.run([arp_bin, "-n", ip], capture_output=True, text=True, check=False, timeout=2.0)
             seen_mac = self._parse_arp_mac((out.stdout or "") + (out.stderr or ""))
-        except Exception:
+            self.debug_print(f"ARP lookup for {ip}: seen_mac={seen_mac}")
+        except Exception as e:
             seen_mac = None
+            self.debug_print(f"ARP lookup failed: {e}")
     
         expected = self._normalize_mac(self.config["scanner"].get("mac", ""))
         mac_matches = bool(seen_mac and expected and seen_mac == expected)
+        self.debug_print(f"MAC comparison: expected={expected}, seen={seen_mac}, matches={mac_matches}")
         return reachable, mac_matches, seen_mac
 
     def _update_net_ui(self, reachable: bool, mac_matches: bool, seen_mac: Optional[str]):
@@ -407,7 +443,7 @@ class ScanApp(QWidget):
         if chosen:
             self.config["classes"][cls] = chosen
             save_config(self.config)
-            self.status.setText(f"Updated folder for “{cls}” → {chosen}")
+            self.status.setText(f"Updated folder for \"{cls}\" → {chosen}")
             self.rebuild_tray_menu()
 
     def on_prefs(self):
@@ -422,6 +458,29 @@ class ScanApp(QWidget):
 
     def on_about(self):
         AboutDialog(self).exec()
+
+    def _determine_scan_source(self) -> str:
+        """Determine which input source to use based on preferences"""
+        input_source = self.config.get("scanner", {}).get("input_source", "Auto")
+        
+        if input_source == "Feeder (ADF)":
+            self.debug_print("Using forced Feeder (ADF) source")
+            return "Feeder"
+        elif input_source == "Platen (Flatbed)":
+            self.debug_print("Using forced Platen (Flatbed) source")
+            return "Platen"
+        else:  # Auto
+            self.debug_print("Auto-detecting input source...")
+            try:
+                # Try to get scanner status for auto-detection
+                status = self.scanner().get_status()
+                self.debug_print(f"Scanner status XML: {status}")
+                source = self.scanner().choose_input_source()
+                self.debug_print(f"Auto-detected source: {source}")
+                return source
+            except Exception as e:
+                self.debug_print(f"Auto-detection failed: {e}, defaulting to Platen")
+                return "Platen"
 
     def on_scan(self, cls: Optional[str] = None):
         try:
@@ -441,23 +500,38 @@ class ScanApp(QWidget):
             filename = make_filename(pattern, cls=cls, topic=topic)
             out_path = os.path.join(target_dir, filename)
 
+            # Determine input source
+            source = self._determine_scan_source()
+
             self.status.setText(f"Scanning to {out_path} …")
             QApplication.processEvents()
 
-            self.scanner().scan_to_pdf(
-                out_path,
-                dpi=int(s.get("dpi", 300)),
-                color_mode=s.get("color_mode", "Color"),
-                duplex=bool(s.get("duplex", False)),
-                page_size=s.get("page_size", "A4"),
-            )
+            # Scan parameters (single-sided only)
+            scan_params = {
+                "dpi": int(s.get("dpi", 300)),
+                "color_mode": s.get("color_mode", "Color"),
+                "page_size": s.get("page_size", "A4"),
+                "input_source": source,
+            }
+            
+            self.debug_print(f"Single-sided scan parameters: {scan_params}")
+
+            # Perform single-sided scan
+            self.scanner().scan_to_pdf(out_path, **scan_params)
 
             self.last_saved_path = out_path
             self.btn_open_file.setEnabled(True)
             self.btn_open_loc.setEnabled(True)
 
+            # Show success message with scan details
+            scan_details = f"Source: {source}, {scan_params['dpi']} DPI, {scan_params['color_mode']}"
+
             self.status.setText(f"Saved: {out_path}")
-            QMessageBox.information(self, "Scan complete", f"Saved to:\n{out_path}")
+            QMessageBox.information(
+                self, 
+                "Scan complete", 
+                f"Saved to:\n{out_path}\n\n{scan_details}"
+            )
 
             if self.config.get("ui", {}).get("remember_last_class", True):
                 self.config.setdefault("ui", {})["last_class"] = cls
@@ -467,6 +541,7 @@ class ScanApp(QWidget):
         except Exception as e:
             tb = traceback.format_exc()
             self.status.setText("Scan failed.")
+            self.debug_print(f"Scan error: {tb}")
             QMessageBox.critical(self, "Error", f"{e}\n\nDetails:\n{tb}")
 
     def on_open_file(self):
@@ -545,6 +620,163 @@ class ScanApp(QWidget):
 
         self.tray.setContextMenu(menu)
 
+    def on_scan_manual_duplex(self, cls: Optional[str] = None):
+        """
+        Manual duplex scanning: scan front sides, then back sides, then combine.
+        """
+        try:
+            if cls is None:
+                cls = self.class_combo.currentText()
+            if cls not in self.config["classes"]:
+                raise RuntimeError(f"Unknown class: {cls}")
+    
+            target_dir = self.config["classes"][cls]
+            self.ensure_dir(target_dir)
+    
+            s = self.config["scanner"]
+            ui = self.config.get("ui", {})
+            pattern = ui.get("filename_pattern", "{class}_{date}_{time}.pdf")
+            topic = self.ed_topic.text().strip()
+    
+            base_filename = make_filename(pattern, cls=cls, topic=topic).replace(".pdf", "")
+            front_path = os.path.join(target_dir, f"{base_filename}_front.pdf")
+            back_path = os.path.join(target_dir, f"{base_filename}_back.pdf")
+            final_path = os.path.join(target_dir, f"{base_filename}.pdf")
+    
+            # Scan parameters (force Feeder for consistent multi-page scanning)
+            scan_params = {
+                "dpi": int(s.get("dpi", 300)),
+                "color_mode": s.get("color_mode", "Color"),
+                "page_size": s.get("page_size", "A4"),
+                "input_source": "Feeder",  # Force ADF for consistent multi-page scanning
+            }
+    
+            # Step 1: Scan front sides
+            reply = QMessageBox.question(
+                self, 
+                "Manual Duplex - Step 1", 
+                "Load your documents in the ADF with the FRONT sides facing down.\n\n"
+                "Click OK when ready to scan the front sides.",
+                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+            )
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
+    
+            self.status.setText("Scanning front sides...")
+            QApplication.processEvents()
+    
+            self.debug_print(f"Scanning front sides with params: {scan_params}")
+            self.scanner().scan_to_pdf(front_path, **scan_params)
+    
+            # Step 2: Scan back sides
+            reply = QMessageBox.question(
+                self, 
+                "Manual Duplex - Step 2", 
+                f"Front sides saved to:\n{front_path}\n\n"
+                "Now FLIP your documents and load them in the ADF with the BACK sides facing down.\n"
+                "Make sure they're in the REVERSE order (last page first).\n\n"
+                "Click OK when ready to scan the back sides.",
+                QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
+            )
+            if reply == QMessageBox.StandardButton.Cancel:
+                return
+    
+            self.status.setText("Scanning back sides...")
+            QApplication.processEvents()
+    
+            self.debug_print(f"Scanning back sides with params: {scan_params}")
+            self.scanner().scan_to_pdf(back_path, **scan_params)
+    
+            # Step 3: Combine PDFs
+            self.status.setText("Combining front and back sides...")
+            QApplication.processEvents()
+    
+            self._combine_duplex_pdfs(front_path, back_path, final_path)
+    
+            # Cleanup temporary files
+            try:
+                os.remove(front_path)
+                os.remove(back_path)
+            except Exception:
+                pass
+    
+            self.last_saved_path = final_path
+            self.btn_open_file.setEnabled(True)
+            self.btn_open_loc.setEnabled(True)
+    
+            self.status.setText(f"Manual duplex complete: {final_path}")
+            QMessageBox.information(
+                self, 
+                "Manual Duplex Complete", 
+                f"Combined duplex document saved to:\n{final_path}\n\n"
+                f"Scanned with: {scan_params['dpi']} DPI, {scan_params['color_mode']}"
+            )
+    
+            if self.config.get("ui", {}).get("remember_last_class", True):
+                self.config.setdefault("ui", {})["last_class"] = cls
+                save_config(self.config)
+                self.rebuild_tray_menu()
+    
+        except Exception as e:
+            tb = traceback.format_exc()
+            self.status.setText("Manual duplex scan failed.")
+            self.debug_print(f"Manual duplex error: {tb}")
+            QMessageBox.critical(self, "Error", f"{e}\n\nDetails:\n{tb}")
+    
+    def _combine_duplex_pdfs(self, front_path: str, back_path: str, output_path: str):
+        """
+        Combine front and back PDF pages into a single duplex document.
+        Assumes back pages are in reverse order.
+        Fixed version that keeps files open during processing.
+        """
+        try:
+            # Open both files and keep them open during the entire process
+            front_file = open(front_path, 'rb')
+            back_file = open(back_path, 'rb')
+            
+            try:
+                # Read both PDFs
+                front_pdf = PyPDF2.PdfReader(front_file)
+                back_pdf = PyPDF2.PdfReader(back_file)
+                
+                # Get page counts
+                front_count = len(front_pdf.pages)
+                back_count = len(back_pdf.pages)
+                
+                self.debug_print(f"Front PDF: {front_count} pages, Back PDF: {back_count} pages")
+                
+                # Create output PDF
+                writer = PyPDF2.PdfWriter()
+                
+                # Get back pages in reverse order (they should be scanned in reverse)
+                back_pages_reversed = list(reversed(back_pdf.pages))
+                
+                # Interleave front and back pages
+                max_pages = max(front_count, back_count)
+                for i in range(max_pages):
+                    # Add front page
+                    if i < front_count:
+                        self.debug_print(f"Adding front page {i+1}")
+                        writer.add_page(front_pdf.pages[i])
+                    
+                    # Add corresponding back page (from reversed list)
+                    if i < back_count:
+                        self.debug_print(f"Adding back page {i+1} (original page {back_count-i})")
+                        writer.add_page(back_pages_reversed[i])
+    
+                # Write combined PDF
+                with open(output_path, 'wb') as output_file:
+                    writer.write(output_file)
+    
+                self.debug_print(f"Successfully combined {front_count} front + {back_count} back pages into {output_path}")
+    
+            finally:
+                # Always close the input files
+                front_file.close()
+                back_file.close()
+    
+        except Exception as e:
+            raise RuntimeError(f"Failed to combine PDFs: {e}")
 
 # ---------- main ----------
 
@@ -554,10 +786,11 @@ def main():
     app.setWindowIcon(QIcon())  # bundle icon used when packaged
     cfg = load_config()
     cfg.setdefault("scanner", {}).setdefault("mac", "")  # ensure key exists
+    cfg.setdefault("scanner", {}).setdefault("input_source", "Auto")  # ensure input_source exists
+    cfg.setdefault("ui", {}).setdefault("debug_mode", False)  # ensure debug_mode exists
     w = ScanApp(cfg)
     w.show()
     sys.exit(app.exec())
 
 if __name__ == "__main__":
     main()
-

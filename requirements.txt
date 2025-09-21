@@ -1,3 +1,4 @@
 PyQt6
 PyYAML
+PyPDF2
 requests
