@@ -3,7 +3,6 @@ scanner:
   mac:  "84:2A:FD:A6:F2:B0"
   dpi: 300
   color_mode: "Color"      # Color | Grayscale
-  duplex: true            # true -> double-sided via ADF
   page_size: "A4"          # A4 | Letter | Legal | ...
 
 ui:
@@ -12,6 +11,16 @@ ui:
   remember_last_class: true
 
 classes:
-  "Algebra": "/Users/yann/Documents/Classes/Algebra"
-  "Physics": "/Users/yann/Documents/Classes/Physics"
-  "CS": "/Users/yann/Documents/Classes/CS"
+  "allemand": "/Users/aloys/Documents/Classes/allemand"
+  "anglais": "/Users/aloys/Documents/Classes/anglais"
+  "arts visuels": "/Users/aloys/Documents/Classes/arts visuels"
+  "biologie": "/Users/aloys/Documents/Classes/biologie"
+  "divers": "/Users/aloys/Documents/Classes/divers"
+  "économie et droit": "/Users/aloys/Documents/Classes/économie et droit"
+  "français": "/Users/aloys/Documents/Classes/français"
+  "géographie": "/Users/aloys/Documents/Classes/géographie"
+  "histoire": "/Users/aloys/Documents/Classes/histoire"
+  "informatique": "/Users/aloys/Documents/Classes/informatique"
+  "maths": "/Users/aloys/Documents/Classes/maths"
+  "philosophie": "/Users/aloys/Documents/Classes/philosophie"
+  "phyisque": "/Users/aloys/Documents/Classes/phyisque"
