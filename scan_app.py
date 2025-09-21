@@ -72,7 +72,7 @@ def make_filename(pattern: str, cls: str, topic: str = "", ext: str = "pdf") -> 
 class AboutDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowTitle("About Class Scanner")
+        self.setWindowTitle("À propos de Class Scanner")
         layout = QVBoxLayout(self)
 
         title = QLabel("<h2>Class Scanner</h2>", self)
@@ -80,22 +80,23 @@ class AboutDialog(QDialog):
         layout.addWidget(title)
 
         body = QLabel(
-            "Scan class documents directly to per-class folders using your network scanner (AirScan/eSCL).<br>"
-            "Version 1.4 • © 2025 You", self
+            "Numérisez les documents de cours directement dans des dossiers par classe "
+            "en utilisant le scanner réseau (AirScan/eSCL).<br>"
+            "Version 0.99 • © 2025 ton Papounet", self
         )
         body.setTextFormat(Qt.TextFormat.RichText)
         body.setWordWrap(True)
         layout.addWidget(body)
 
         features = QLabel(
-            "Features:<ul>"
-            "<li>Class picker & custom filename patterns</li>"
-            "<li>Menu bar quick actions</li>"
-            "<li>Open file & open location</li>"
-            "<li>Preferences: IP/MAC, DPI, color, page size</li>"
-            "<li>Manual input source selection (ADF/Flatbed)</li>"
-            "<li>Network status (green/amber/red with MAC verify)</li>"
-            "<li>Manual duplex scanning support</li>"
+            "Fonctionnalités :<ul>"
+            "<li>Sélecteur de classe et modèles de noms de fichiers personnalisés</li>"
+            "<li>Actions rapides dans la barre de menus</li>"
+            "<li>Ouvrir le fichier et ouvrir l'emplacement</li>"
+            "<li>Préférences : IP/MAC, DPI, couleur, format de page</li>"
+            "<li>Sélection manuelle de la source d'entrée (CAD/Vitre)</li>"
+            "<li>État du réseau (vert/orange/rouge avec vérification MAC)</li>"
+            "<li>Support de numérisation recto-verso manuelle</li>"
             "</ul>", self
         )
         features.setTextFormat(Qt.TextFormat.RichText)
@@ -112,64 +113,75 @@ class AboutDialog(QDialog):
 class PreferencesDialog(QDialog):
     def __init__(self, cfg: Dict[str, Any], parent=None):
         super().__init__(parent)
-        self.setWindowTitle("Preferences")
+        self.setWindowTitle("Préférences")
         self.cfg = cfg
 
         frm = QFormLayout(self)
 
         self.ed_host = QLineEdit(self)
         self.ed_host.setText(str(cfg.get("scanner", {}).get("host", "")))
-        frm.addRow("Scanner IP / Host:", self.ed_host)
+        frm.addRow("IP / Hôte du scanner :", self.ed_host)
 
         self.ed_mac = QLineEdit(self)
-        self.ed_mac.setPlaceholderText("e.g. 84:2A:FD:A6:F2:B0 (optional, for verification)")
+        self.ed_mac.setPlaceholderText("ex. 84:2A:FD:A6:F2:B0 (optionnel, pour vérification)")
         self.ed_mac.setText(cfg.get("scanner", {}).get("mac", ""))
-        frm.addRow("Scanner MAC:", self.ed_mac)
+        frm.addRow("MAC du scanner :", self.ed_mac)
 
         self.spin_dpi = QSpinBox(self)
         self.spin_dpi.setRange(75, 1200)
         self.spin_dpi.setSingleStep(25)
         self.spin_dpi.setValue(int(cfg.get("scanner", {}).get("dpi", 300)))
-        frm.addRow("DPI:", self.spin_dpi)
+        frm.addRow("DPI :", self.spin_dpi)
 
         self.ed_color = QComboBox(self)
-        self.ed_color.addItems(["Color", "Grayscale"])
-        self.ed_color.setCurrentText(cfg.get("scanner", {}).get("color_mode", "Color"))
-        frm.addRow("Color mode:", self.ed_color)
+        self.ed_color.addItems(["Couleur", "Niveaux de gris"])
+        color_mode = cfg.get("scanner", {}).get("color_mode", "Color")
+        # Convert English to French
+        if color_mode == "Color":
+            self.ed_color.setCurrentText("Couleur")
+        elif color_mode == "Grayscale":
+            self.ed_color.setCurrentText("Niveaux de gris")
+        frm.addRow("Mode couleur :", self.ed_color)
 
         self.ed_page = QComboBox(self)
         self.ed_page.addItems(["A4", "Letter", "Legal", "A5", "A3"])
         self.ed_page.setEditable(True)
         self.ed_page.setCurrentText(cfg.get("scanner", {}).get("page_size", "A4"))
-        frm.addRow("Page size:", self.ed_page)
+        frm.addRow("Format de page :", self.ed_page)
 
         # Input source selection
         self.ed_source = QComboBox(self)
-        self.ed_source.addItems(["Auto", "Feeder (ADF)", "Platen (Flatbed)"])
+        self.ed_source.addItems(["Auto", "Chargeur (CAD)", "Vitre (Scanner à plat)"])
         current_source = cfg.get("scanner", {}).get("input_source", "Auto")
-        self.ed_source.setCurrentText(current_source)
-        frm.addRow("Input source:", self.ed_source)
+        # Convert English to French
+        if current_source == "Feeder (ADF)":
+            self.ed_source.setCurrentText("Chargeur (CAD)")
+        elif current_source == "Platen (Flatbed)":
+            self.ed_source.setCurrentText("Vitre (Scanner à plat)")
+        else:
+            self.ed_source.setCurrentText("Auto")
+        frm.addRow("Source d'entrée :", self.ed_source)
 
         # Add help text for input source
-        source_hint = QLabel("Auto: detect based on document presence. Feeder: force ADF use. Platen: force flatbed use.", self)
+        source_hint = QLabel("Auto : détection basée sur la présence de documents. Chargeur : force l'utilisation du CAD. Vitre : force l'utilisation de la vitre.", self)
         source_hint.setStyleSheet("color: #666; font-size: 11px;")
         source_hint.setWordWrap(True)
         frm.addRow("", source_hint)
 
         self.ed_pattern = QLineEdit(self)
         self.ed_pattern.setText(cfg.get("ui", {}).get("filename_pattern", "{class}_{date}_{time}.pdf"))
-        frm.addRow("Filename pattern:", self.ed_pattern)
+        frm.addRow("Modèle de nom de fichier :", self.ed_pattern)
 
-        self.chk_remember = QCheckBox("Remember last class for one-click scanning")
+        self.chk_remember = QCheckBox("Se souvenir de la dernière classe pour la numérisation en un clic")
         self.chk_remember.setChecked(bool(cfg.get("ui", {}).get("remember_last_class", True)))
         frm.addRow(self.chk_remember)
 
         # Debug mode checkbox
-        self.chk_debug = QCheckBox("Enable debug output (check console for scanner status)")
+        self.chk_debug = QCheckBox("Activer la sortie de débogage (vérifiez la console pour l'état du scanner)")
         self.chk_debug.setChecked(bool(cfg.get("ui", {}).get("debug_mode", False)))
         frm.addRow(self.chk_debug)
 
-        hint = QLabel("Tokens: {class} {date} {time} {topic} (and {ext})", self)
+        hint = QLabel("Variables : {class} {date} {time} {topic} (et {ext})", self)
         hint.setStyleSheet("color: #666;")
         frm.addRow("", hint)
 
@@ -184,9 +196,25 @@ class PreferencesDialog(QDialog):
         self.cfg["scanner"]["host"] = self.ed_host.text().strip()
         self.cfg["scanner"]["mac"] = self.ed_mac.text().strip()
         self.cfg["scanner"]["dpi"] = int(self.spin_dpi.value())
-        self.cfg["scanner"]["color_mode"] = self.ed_color.currentText()
+        
+        # Convert French back to English for storage
+        color_text = self.ed_color.currentText()
+        if color_text == "Couleur":
+            self.cfg["scanner"]["color_mode"] = "Color"
+        elif color_text == "Niveaux de gris":
+            self.cfg["scanner"]["color_mode"] = "Grayscale"
+        
         self.cfg["scanner"]["page_size"] = self.ed_page.currentText().strip()
-        self.cfg["scanner"]["input_source"] = self.ed_source.currentText()
+        
+        # Convert French back to English for storage
+        source_text = self.ed_source.currentText()
+        if source_text == "Chargeur (CAD)":
+            self.cfg["scanner"]["input_source"] = "Feeder (ADF)"
+        elif source_text == "Vitre (Scanner à plat)":
+            self.cfg["scanner"]["input_source"] = "Platen (Flatbed)"
+        else:
+            self.cfg["scanner"]["input_source"] = "Auto"
+            
         self.cfg["ui"]["filename_pattern"] = self.ed_pattern.text().strip() or "{class}_{date}_{time}.pdf"
         self.cfg["ui"]["remember_last_class"] = bool(self.chk_remember.isChecked())
         self.cfg["ui"]["debug_mode"] = bool(self.chk_debug.isChecked())
@@ -225,7 +253,7 @@ class ScanApp(QWidget):
 
         layout = QVBoxLayout(self)
 
-        header = QLabel("Choose class and scan:", self)
+        header = QLabel("Choisissez une classe et numérisez :", self)
         layout.addWidget(header)
 
         # Row 1: class + topic
@@ -238,32 +266,32 @@ class ScanApp(QWidget):
         row1.addWidget(self.class_combo, 2)
 
         self.ed_topic = QLineEdit(self)
-        self.ed_topic.setPlaceholderText("Optional topic (e.g., lecture3, homework2)")
+        self.ed_topic.setPlaceholderText("Sujet optionnel (ex. cours3, devoir2)")
         row1.addWidget(self.ed_topic, 3)
         layout.addLayout(row1)
 
         # Row 2: buttons
         row2 = QHBoxLayout()
-        self.btn_scan = QPushButton("Scan (Single-sided)")
+        self.btn_scan = QPushButton("Numériser (Recto)")
         self.btn_scan.clicked.connect(lambda: self.on_scan())
         self.btn_scan.setShortcut("Return")
-        self.btn_scan.setToolTip("Scan single-sided documents")
+        self.btn_scan.setToolTip("Numériser des documents recto")
         row2.addWidget(self.btn_scan)
         
-        self.btn_manual_duplex = QPushButton("Manual Duplex")
+        self.btn_manual_duplex = QPushButton("Recto-Verso Manuel")
         self.btn_manual_duplex.clicked.connect(lambda: self.on_scan_manual_duplex())
-        self.btn_manual_duplex.setToolTip("Scan front sides, then back sides, then combine")
+        self.btn_manual_duplex.setToolTip("Numériser les rectos, puis les versos, puis combiner")
         row2.addWidget(self.btn_manual_duplex)
         
-        self.btn_open = QPushButton("Open folder…")
+        self.btn_open = QPushButton("Ouvrir le dossier…")
         self.btn_open.clicked.connect(self.on_open_folder)
         row2.addWidget(self.btn_open)
         
-        self.btn_prefs = QPushButton("Preferences…")
+        self.btn_prefs = QPushButton("Préférences…")
         self.btn_prefs.clicked.connect(self.on_prefs)
         row2.addWidget(self.btn_prefs)
         
-        self.btn_about = QPushButton("About…")
+        self.btn_about = QPushButton("À propos…")
         self.btn_about.clicked.connect(self.on_about)
         row2.addWidget(self.btn_about)
 
@@ -278,7 +306,7 @@ class ScanApp(QWidget):
         netrow = QHBoxLayout()
         self.net_flag = QLabel("●")
         self.net_flag.setStyleSheet("font-size: 18px; color: #999;")  # gray initially
-        self.net_label = QLabel("Checking printer…")
+        self.net_label = QLabel("Vérification de l'imprimante…")
         netrow.addWidget(self.net_flag)
         netrow.addWidget(self.net_label)
         netrow.addStretch(1)
@@ -286,16 +314,25 @@ class ScanApp(QWidget):
 
         # Row 4: Open file / Open location
         btnrow = QHBoxLayout()
-        self.btn_open_file = QPushButton("Open file")
+        self.btn_open_file = QPushButton("Ouvrir le fichier")
         self.btn_open_file.setEnabled(False)
         self.btn_open_file.clicked.connect(self.on_open_file)
         btnrow.addWidget(self.btn_open_file)
 
-        self.btn_open_loc = QPushButton("Open location")
+        self.btn_open_loc = QPushButton("Ouvrir l'emplacement")
         self.btn_open_loc.setEnabled(False)
         self.btn_open_loc.clicked.connect(self.on_open_location)
         btnrow.addWidget(self.btn_open_loc)
         layout.addLayout(btnrow)
+
+        # Store references to buttons that should be disabled when printer is unreachable
+        self.printer_dependent_buttons = [
+            self.btn_scan,
+            self.btn_manual_duplex,
+            self.btn_open,
+            self.btn_open_file,
+            self.btn_open_loc
+        ]
 
         # Tray (menu bar extra)
         self.tray: Optional[QSystemTrayIcon] = None
@@ -376,41 +413,51 @@ class ScanApp(QWidget):
                 proxies={"http": None, "https": None},
             )
             reachable = (200 <= r.status_code < 500)
-            self.debug_print(f"HTTP probe to {url}: status={r.status_code}, reachable={reachable}")
+            self.debug_print(f"Sonde HTTP vers {url}: statut={r.status_code}, accessible={reachable}")
         except Exception as e:
             reachable = False
-            self.debug_print(f"HTTP probe failed: {e}")
+            self.debug_print(f"Échec de la sonde HTTP: {e}")
     
         # ARP (best-effort)
         try:
             arp_bin = "/usr/sbin/arp" if os.path.exists("/usr/sbin/arp") else "arp"
             out = subprocess.run([arp_bin, "-n", ip], capture_output=True, text=True, check=False, timeout=2.0)
             seen_mac = self._parse_arp_mac((out.stdout or "") + (out.stderr or ""))
-            self.debug_print(f"ARP lookup for {ip}: seen_mac={seen_mac}")
+            self.debug_print(f"Recherche ARP pour {ip}: mac_vue={seen_mac}")
         except Exception as e:
             seen_mac = None
-            self.debug_print(f"ARP lookup failed: {e}")
+            self.debug_print(f"Échec de la recherche ARP: {e}")
     
         expected = self._normalize_mac(self.config["scanner"].get("mac", ""))
         mac_matches = bool(seen_mac and expected and seen_mac == expected)
-        self.debug_print(f"MAC comparison: expected={expected}, seen={seen_mac}, matches={mac_matches}")
+        self.debug_print(f"Comparaison MAC: attendue={expected}, vue={seen_mac}, correspond={mac_matches}")
         return reachable, mac_matches, seen_mac
 
     def _update_net_ui(self, reachable: bool, mac_matches: bool, seen_mac: Optional[str]):
+        # Update network status display
         if not reachable:
             self.net_flag.setStyleSheet("font-size: 18px; color: #d22;")  # red
-            self.net_label.setText("Printer unreachable")
-            self.net_label.setToolTip("No HTTP/ARP response from the device.")
+            self.net_label.setText("Imprimante inaccessible")
+            self.net_label.setToolTip("Aucune réponse HTTP/ARP de l'appareil.")
         elif reachable and mac_matches:
             self.net_flag.setStyleSheet("font-size: 18px; color: #2a2;")  # green
-            self.net_label.setText("Printer OK (IP & MAC match)")
-            self.net_label.setToolTip(f"Matched MAC: {seen_mac}")
+            self.net_label.setText("Imprimante OK (IP et MAC correspondent)")
+            self.net_label.setToolTip(f"MAC correspondante: {seen_mac}")
         else:
             self.net_flag.setStyleSheet("font-size: 18px; color: #e6a100;")  # amber
-            self.net_label.setText("Warning: IP reachable, MAC mismatch")
+            self.net_label.setText("Attention: IP accessible, MAC ne correspond pas")
             exp = self.config["scanner"].get("mac", "")
-            tip = f"ARP reports {seen_mac or 'unknown'}, expected {exp or 'not set'}"
+            tip = f"ARP rapporte {seen_mac or 'inconnue'}, attendue {exp or 'non définie'}"
             self.net_label.setToolTip(tip)
+
+        # Enable/disable buttons based on printer reachability
+        for button in self.printer_dependent_buttons:
+            button.setEnabled(reachable)
+        
+        # Special case: if we have a saved file, enable the file-related buttons regardless of printer status
+        if self.last_saved_path and os.path.exists(self.last_saved_path):
+            self.btn_open_file.setEnabled(True)
+            self.btn_open_loc.setEnabled(True)
 
     def start_net_monitor(self):
         # stop previous timer if any
@@ -439,11 +486,11 @@ class ScanApp(QWidget):
         cls = self.class_combo.currentText()
         target = self.current_target_dir()
         start = target if os.path.isdir(target) else str(pathlib.Path.home())
-        chosen = QFileDialog.getExistingDirectory(self, f"Choose folder for {cls}", start)
+        chosen = QFileDialog.getExistingDirectory(self, f"Choisir le dossier pour {cls}", start)
         if chosen:
             self.config["classes"][cls] = chosen
             save_config(self.config)
-            self.status.setText(f"Updated folder for \"{cls}\" → {chosen}")
+            self.status.setText(f"Dossier mis à jour pour \"{cls}\" → {chosen}")
             self.rebuild_tray_menu()
 
     def on_prefs(self):
@@ -452,7 +499,7 @@ class ScanApp(QWidget):
             dlg.apply()
             save_config(self.config)
             self._scanner = None  # pick up new host next time
-            self.status.setText("Preferences saved.")
+            self.status.setText("Préférences sauvegardées.")
             self.rebuild_tray_menu()
             self.start_net_monitor()  # restart with new IP/MAC
 
@@ -464,22 +511,22 @@ class ScanApp(QWidget):
         input_source = self.config.get("scanner", {}).get("input_source", "Auto")
         
         if input_source == "Feeder (ADF)":
-            self.debug_print("Using forced Feeder (ADF) source")
+            self.debug_print("Utilisation forcée de la source Chargeur (CAD)")
             return "Feeder"
         elif input_source == "Platen (Flatbed)":
-            self.debug_print("Using forced Platen (Flatbed) source")
+            self.debug_print("Utilisation forcée de la source Vitre (Scanner à plat)")
             return "Platen"
         else:  # Auto
-            self.debug_print("Auto-detecting input source...")
+            self.debug_print("Détection automatique de la source d'entrée...")
             try:
                 # Try to get scanner status for auto-detection
                 status = self.scanner().get_status()
-                self.debug_print(f"Scanner status XML: {status}")
+                self.debug_print(f"XML de statut du scanner: {status}")
                 source = self.scanner().choose_input_source()
-                self.debug_print(f"Auto-detected source: {source}")
+                self.debug_print(f"Source auto-détectée: {source}")
                 return source
             except Exception as e:
-                self.debug_print(f"Auto-detection failed: {e}, defaulting to Platen")
+                self.debug_print(f"Échec de la détection automatique: {e}, utilisation par défaut de Vitre")
                 return "Platen"
 
     def on_scan(self, cls: Optional[str] = None):
@@ -487,7 +534,7 @@ class ScanApp(QWidget):
             if cls is None:
                 cls = self.class_combo.currentText()
             if cls not in self.config["classes"]:
-                raise RuntimeError(f"Unknown class: {cls}")
+                raise RuntimeError(f"Classe inconnue: {cls}")
 
             target_dir = self.config["classes"][cls]
             self.ensure_dir(target_dir)
@@ -503,7 +550,7 @@ class ScanApp(QWidget):
             # Determine input source
             source = self._determine_scan_source()
 
-            self.status.setText(f"Scanning to {out_path} …")
+            self.status.setText(f"Numérisation vers {out_path} …")
             QApplication.processEvents()
 
             # Scan parameters (single-sided only)
@@ -514,7 +561,7 @@ class ScanApp(QWidget):
                 "input_source": source,
             }
             
-            self.debug_print(f"Single-sided scan parameters: {scan_params}")
+            self.debug_print(f"Paramètres de numérisation recto: {scan_params}")
 
             # Perform single-sided scan
             self.scanner().scan_to_pdf(out_path, **scan_params)
@@ -526,11 +573,11 @@ class ScanApp(QWidget):
             # Show success message with scan details
             scan_details = f"Source: {source}, {scan_params['dpi']} DPI, {scan_params['color_mode']}"
 
-            self.status.setText(f"Saved: {out_path}")
+            self.status.setText(f"Sauvegardé: {out_path}")
             QMessageBox.information(
                 self, 
-                "Scan complete", 
-                f"Saved to:\n{out_path}\n\n{scan_details}"
+                "Numérisation terminée", 
+                f"Sauvegardé dans:\n{out_path}\n\n{scan_details}"
             )
 
             if self.config.get("ui", {}).get("remember_last_class", True):
@@ -540,18 +587,18 @@ class ScanApp(QWidget):
 
         except Exception as e:
             tb = traceback.format_exc()
-            self.status.setText("Scan failed.")
-            self.debug_print(f"Scan error: {tb}")
-            QMessageBox.critical(self, "Error", f"{e}\n\nDetails:\n{tb}")
+            self.status.setText("Échec de la numérisation.")
+            self.debug_print(f"Erreur de numérisation: {tb}")
+            QMessageBox.critical(self, "Erreur", f"{e}\n\nDétails:\n{tb}")
 
     def on_open_file(self):
         if not self.last_saved_path or not os.path.exists(self.last_saved_path):
-            QMessageBox.warning(self, "No file", "There is no scanned file to open yet.")
+            QMessageBox.warning(self, "Aucun fichier", "Il n'y a pas encore de fichier numérisé à ouvrir.")
             return
         try:
             subprocess.run(["open", self.last_saved_path], check=False)
         except Exception as e:
-            QMessageBox.critical(self, "Open failed", str(e))
+            QMessageBox.critical(self, "Échec de l'ouverture", str(e))
 
     def on_open_location(self):
         if self.last_saved_path and os.path.exists(self.last_saved_path):
@@ -567,7 +614,7 @@ class ScanApp(QWidget):
                 return
         except Exception:
             pass
-        QMessageBox.warning(self, "No location", "There is no scanned file or target folder to open yet.")
+        QMessageBox.warning(self, "Aucun emplacement", "Il n'y a pas encore de fichier numérisé ou de dossier cible à ouvrir.")
 
     # ---- Tray (menu bar extra) ----
 
@@ -589,11 +636,11 @@ class ScanApp(QWidget):
         menu = QMenu()
 
         last_cls = self.config.get("ui", {}).get("last_class", "")
-        act_scan_last = QAction(f"Scan to Last Class ({last_cls})" if last_cls else "Scan to Last Class", self)
+        act_scan_last = QAction(f"Numériser vers la dernière classe ({last_cls})" if last_cls else "Numériser vers la dernière classe", self)
         act_scan_last.triggered.connect(lambda checked=False, c=last_cls: self.on_scan(cls=c or None))
         menu.addAction(act_scan_last)
 
-        sub = QMenu("Scan to…", menu)
+        sub = QMenu("Numériser vers…", menu)
         for cls in self.config["classes"].keys():
             a = QAction(cls, sub)
             a.triggered.connect(lambda checked=False, c=cls: self.on_scan(cls=c))
@@ -602,19 +649,19 @@ class ScanApp(QWidget):
 
         menu.addSeparator()
 
-        a_about = QAction("About…", menu)
+        a_about = QAction("À propos…", menu)
         a_about.triggered.connect(self.on_about)
         menu.addAction(a_about)
 
-        a_open = QAction("Open Main Window", menu)
+        a_open = QAction("Ouvrir la fenêtre principale", menu)
         a_open.triggered.connect(self.showNormal)
         menu.addAction(a_open)
 
-        a_prefs = QAction("Preferences…", menu)
+        a_prefs = QAction("Préférences…", menu)
         a_prefs.triggered.connect(self.on_prefs)
         menu.addAction(a_prefs)
 
-        a_quit = QAction("Quit", menu)
+        a_quit = QAction("Quitter", menu)
         a_quit.triggered.connect(QApplication.instance().quit)
         menu.addAction(a_quit)
 
@@ -628,7 +675,7 @@ class ScanApp(QWidget):
             if cls is None:
                 cls = self.class_combo.currentText()
             if cls not in self.config["classes"]:
-                raise RuntimeError(f"Unknown class: {cls}")
+                raise RuntimeError(f"Classe inconnue: {cls}")
     
             target_dir = self.config["classes"][cls]
             self.ensure_dir(target_dir)
@@ -639,8 +686,8 @@ class ScanApp(QWidget):
             topic = self.ed_topic.text().strip()
     
             base_filename = make_filename(pattern, cls=cls, topic=topic).replace(".pdf", "")
-            front_path = os.path.join(target_dir, f"{base_filename}_front.pdf")
-            back_path = os.path.join(target_dir, f"{base_filename}_back.pdf")
+            front_path = os.path.join(target_dir, f"{base_filename}_recto.pdf")
+            back_path = os.path.join(target_dir, f"{base_filename}_verso.pdf")
             final_path = os.path.join(target_dir, f"{base_filename}.pdf")
     
             # Scan parameters (force Feeder for consistent multi-page scanning)
@@ -654,41 +701,41 @@ class ScanApp(QWidget):
             # Step 1: Scan front sides
             reply = QMessageBox.question(
                 self, 
-                "Manual Duplex - Step 1", 
-                "Load your documents in the ADF with the FRONT sides facing down.\n\n"
-                "Click OK when ready to scan the front sides.",
+                "Recto-Verso Manuel - Étape 1", 
+                "Chargez vos documents dans le CAD avec les RECTOS face vers le bas.\n\n"
+                "Cliquez sur OK quand vous êtes prêt à numériser les rectos.",
                 QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
             )
             if reply == QMessageBox.StandardButton.Cancel:
                 return
     
-            self.status.setText("Scanning front sides...")
+            self.status.setText("Numérisation des rectos...")
             QApplication.processEvents()
     
-            self.debug_print(f"Scanning front sides with params: {scan_params}")
+            self.debug_print(f"Numérisation des rectos avec paramètres: {scan_params}")
             self.scanner().scan_to_pdf(front_path, **scan_params)
     
             # Step 2: Scan back sides
             reply = QMessageBox.question(
                 self, 
-                "Manual Duplex - Step 2", 
-                f"Front sides saved to:\n{front_path}\n\n"
-                "Now FLIP your documents and load them in the ADF with the BACK sides facing down.\n"
-                "Make sure they're in the REVERSE order (last page first).\n\n"
-                "Click OK when ready to scan the back sides.",
+                "Recto-Verso Manuel - Étape 2", 
+                f"Rectos sauvegardés dans:\n{front_path}\n\n"
+                "Maintenant RETOURNEZ vos documents et chargez-les dans le CAD avec les VERSOS face vers le bas.\n"
+                "Assurez-vous qu'ils sont dans l'ordre INVERSE (dernière page en premier).\n\n"
+                "Cliquez sur OK quand vous êtes prêt à numériser les versos.",
                 QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel
             )
             if reply == QMessageBox.StandardButton.Cancel:
                 return
     
-            self.status.setText("Scanning back sides...")
+            self.status.setText("Numérisation des versos...")
             QApplication.processEvents()
     
-            self.debug_print(f"Scanning back sides with params: {scan_params}")
+            self.debug_print(f"Numérisation des versos avec paramètres: {scan_params}")
             self.scanner().scan_to_pdf(back_path, **scan_params)
     
             # Step 3: Combine PDFs
-            self.status.setText("Combining front and back sides...")
+            self.status.setText("Combinaison des rectos et versos...")
             QApplication.processEvents()
     
             self._combine_duplex_pdfs(front_path, back_path, final_path)
@@ -704,12 +751,12 @@ class ScanApp(QWidget):
             self.btn_open_file.setEnabled(True)
             self.btn_open_loc.setEnabled(True)
     
-            self.status.setText(f"Manual duplex complete: {final_path}")
+            self.status.setText(f"Recto-verso manuel terminé: {final_path}")
             QMessageBox.information(
                 self, 
-                "Manual Duplex Complete", 
-                f"Combined duplex document saved to:\n{final_path}\n\n"
-                f"Scanned with: {scan_params['dpi']} DPI, {scan_params['color_mode']}"
+                "Recto-Verso Manuel Terminé", 
+                f"Document recto-verso combiné sauvegardé dans:\n{final_path}\n\n"
+                f"Numérisé avec: {scan_params['dpi']} DPI, {scan_params['color_mode']}"
             )
     
             if self.config.get("ui", {}).get("remember_last_class", True):
@@ -719,9 +766,9 @@ class ScanApp(QWidget):
     
         except Exception as e:
             tb = traceback.format_exc()
-            self.status.setText("Manual duplex scan failed.")
-            self.debug_print(f"Manual duplex error: {tb}")
-            QMessageBox.critical(self, "Error", f"{e}\n\nDetails:\n{tb}")
+            self.status.setText("Échec de la numérisation recto-verso manuelle.")
+            self.debug_print(f"Erreur de recto-verso manuel: {tb}")
+            QMessageBox.critical(self, "Erreur", f"{e}\n\nDétails:\n{tb}")
     
     def _combine_duplex_pdfs(self, front_path: str, back_path: str, output_path: str):
         """
@@ -743,7 +790,7 @@ class ScanApp(QWidget):
                 front_count = len(front_pdf.pages)
                 back_count = len(back_pdf.pages)
                 
-                self.debug_print(f"Front PDF: {front_count} pages, Back PDF: {back_count} pages")
+                self.debug_print(f"PDF rectos: {front_count} pages, PDF versos: {back_count} pages")
                 
                 # Create output PDF
                 writer = PyPDF2.PdfWriter()
@@ -756,19 +803,19 @@ class ScanApp(QWidget):
                 for i in range(max_pages):
                     # Add front page
                     if i < front_count:
-                        self.debug_print(f"Adding front page {i+1}")
+                        self.debug_print(f"Ajout de la page recto {i+1}")
                         writer.add_page(front_pdf.pages[i])
                     
                     # Add corresponding back page (from reversed list)
                     if i < back_count:
-                        self.debug_print(f"Adding back page {i+1} (original page {back_count-i})")
+                        self.debug_print(f"Ajout de la page verso {i+1} (page originale {back_count-i})")
                         writer.add_page(back_pages_reversed[i])
     
                 # Write combined PDF
                 with open(output_path, 'wb') as output_file:
                     writer.write(output_file)
     
-                self.debug_print(f"Successfully combined {front_count} front + {back_count} back pages into {output_path}")
+                self.debug_print(f"Combinaison réussie de {front_count} rectos + {back_count} versos dans {output_path}")
     
             finally:
                 # Always close the input files
@@ -776,7 +823,7 @@ class ScanApp(QWidget):
                 back_file.close()
     
         except Exception as e:
-            raise RuntimeError(f"Failed to combine PDFs: {e}")
+            raise RuntimeError(f"Échec de la combinaison des PDF: {e}")
 
 # ---------- main ----------
 
